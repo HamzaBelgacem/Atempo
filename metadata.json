@@ -1,0 +1,9 @@
+{
+  "name": "V15 Atempo",
+  "description": "A social event discovery platform connecting people through shared experiences. Features map-based discovery, real-time video previews, and AI-driven networking.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera",
+    "microphone"
+  ]
+}

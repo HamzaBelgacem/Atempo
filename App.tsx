@@ -1,3 +1,7 @@
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./services/firebase";
+import { getUserProfile } from "./services/user";
+import { loginWithEmail, logout } from "./services/auth";
 import React, { useState, useEffect, useMemo } from 'react';
 import MapView from './components/MapView';
 import DiscoverFeed from './components/DiscoverFeed';
@@ -19,6 +23,71 @@ import { Map, Compass, User as UserIcon, PlayCircle, Briefcase, Shield, MessageS
 import { ViewState, User, UserType, Event, ChatGroup, Business, AppTheme, ChatMember, MemoryItem, Notification, ContributorRole, PersonalityProfile } from './types';
 import { MOCK_EVENTS, MOCK_BUSINESSES, TRANSLATIONS } from './constants';
 import LoginModal from './components/ui/LoginModal';
+
+const [firebaseUser, setFirebaseUser] = useState<any>(null);
+
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, async (fbUser) => {
+
+    if (!fbUser) {
+      // Not logged in
+      setUser(prev => ({
+        ...prev,
+        isRegistered: false
+      }));
+      setFirebaseUser(null);
+      return;
+    }
+
+    setFirebaseUser(fbUser);
+
+    // Load full Firestore profile
+    const profile = await getUserProfile(fbUser.uid);
+
+    if (profile) {
+      setUser(prev => ({
+        ...prev,
+        ...profile,
+        id: fbUser.uid,
+        email: fbUser.email || "",
+        isRegistered: true
+      }));
+    }
+
+  });
+
+  return () => unsub();
+}, []);
+
+
+const handleLogin = async (email: string, password: string) => {
+
+  try {
+
+    // ✅ Firebase logs the user in
+    await loginWithEmail(email, password);
+
+    // ✅ Close login modal
+    setShowLoginModal(false);
+
+    // ✅ Optional notification
+    addNotification(
+      'Welcome back ✅',
+      'Login successful'
+    );
+
+  } catch (error: any) {
+
+    console.error("Login error:", error);
+
+    addNotification(
+      'Login failed ❌',
+      error.message || 'Invalid email or password'
+    );
+
+  }
+};
+
 
 const THEME_COLORS: Record<AppTheme, string> = {
   [AppTheme.ROSE]: '#FDFCF8', 
@@ -79,44 +148,6 @@ const App: React.FC = () => {
     ] : []
   })));
 
-  const [usersDB, setUsersDB] = useState<any[]>(() => {
-  const saved = localStorage.getItem('eh_users_db');
-  return saved ? JSON.parse(saved) : [];
-});
-
-useEffect(() => {
-  localStorage.setItem('eh_users_db', JSON.stringify(usersDB));
-}, [usersDB]);
-  const handleToggleCollaborate = (eventId: string) => {
-    if (!user.isRegistered) {
-      setShowRegModal(true);
-      return;
-    }
-    
-    setEvents(prev => prev.map(e => {
-      if (e.id === eventId) {
-        const isCollaborating = e.collaboratorIds?.includes(user.id);
-        const newIds = isCollaborating 
-          ? e.collaboratorIds?.filter(id => id !== user.id) 
-          : [...(e.collaboratorIds || []), user.id];
-        
-        const newCollaborators = isCollaborating
-          ? e.collaborators?.filter(c => c.id !== user.id)
-          : [...(e.collaborators || []), { 
-              id: user.id, 
-              name: user.name, 
-              avatarUrl: user.avatarUrl, 
-              role: 'Performing Artist' as ContributorRole,
-              eventsCount: 0,
-              followersCount: 0,
-              collaborationsCount: 1
-            }];
-
-        return { ...e, collaboratorIds: newIds, collaborators: newCollaborators };
-      }
-      return e;
-    }));
-  };
 
   const handleOpenCollaboratorProfile = (collaboratorId: string) => {
     setSelectedCollaboratorId(collaboratorId);
@@ -394,35 +425,20 @@ useEffect(() => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('eh_user_v3');
-    setUser({
-      id: 'guest_' + Math.random().toString(36).substr(2, 9),
-      name: 'Guest',
-      language: 'en',
-      isOnboarded: true, 
-      isRegistered: false,
-      type: UserType.STANDARD,
-      theme: AppTheme.ROSE,
-      preferences: [],
-      locationPermission: 'prompt',
-      marketingAccepted: false,
-      registeredEventIds: ['e1', 'e3'],
-      activeChatIds: ['e1', 'e3'],
-      instagramHandle: '@horizon_guest',
-      locationLabel: 'Valencia',
-      notificationPrefs: {
-        newEvents: true,
-        groupMessages: true,
-        businessInvites: true
-      }
-    });
-    setAllChatGroups([]);
-    setCurrentCity('Valencia');
-    setShowSettings(false);
-    setShowRegModal(true); 
-    navigateTo(ViewState.MAP);
-  };
+ const handleLogout = async () => {
+
+  await logout();
+
+  setUser(prev => ({
+    ...prev,
+    isRegistered: false
+  }));
+
+  setShowSettings(false);
+
+  navigateTo(ViewState.MAP);
+
+};
 
   const handleJoinChat = (target: Event | { id: string, title: string, type?: 'EVENT' | 'BUSINESS' }) => {
     const isEvent = 'attendees' in target;
@@ -473,80 +489,23 @@ useEffect(() => {
     }
   };
 
-  const handleRegistrationSuccess = (data: any) => {
-    const updatedUser = { ...data, isRegistered: true };
-    setUsersDB(prev => [...prev, updatedUser]) ;   
-    // If business registers with invite code, grant benefits (mocked)
-    if (data.inviteCode && data.type === UserType.BUSINESS) {
-      updatedUser.isVerified = true;
-      updatedUser.hasLifetimeSubscription = true;
-    }
+const handleRegistrationSuccess = () => {
 
-    setUser(prev => ({ ...prev, ...updatedUser }));
-    if (data.locationLabel) {
-      setCurrentCity(data.locationLabel);
-    }
-    setShowRegModal(false);
-    setTimeout(() => {
-      setShowWelcomeGuide(true);
-    }, 500);
-  };
+  setShowRegModal(false);
 
-  // const handleLogin = (email: string, password: string) => {
+  setTimeout(() => {
+    setShowWelcomeGuide(true);
+  }, 500);
+
+};
+
+   // const handleLogin = (email: string, password: string) => {
   // const existingUser = usersDB.find(
   //   u => u.email === email && u.password === password
   // );
 
-const handleLogin1 = (email: string, password: string) => {
 
 
-  if (email === fakeUser.email && password === fakeUser.password) {
-    console.log("Login success ✅");
-
-    // exemple user state
-    setUser({
-      ...user,
-      isRegistered: true,
-      email: fakeUser.email,
-      name: fakeUser.name,
-      password: fakeUser.password,
-    });
-
-    setShowLoginModal(false);
-  } else {
-    alert("Invalid credentials ❌");
-  }
-
-
-  if (!fakeUser || user.email !== fakeUser.email || user.password !== fakeUser.password) {
-    addNotification('Error', 'Invalid credentials', 'EVENT');
-    return;
-  }
-
-  setUser(fakeUser);
-  setShowLoginModal(false);
-  addNotification('Welcome back', `Hello ${fakeUser.name}!`, 'EVENT');
-};
-const handleLogin = async (email: string, password: string) => {
- 
-  const res = await fetch("http://localhost:3001/api/login", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email, password }),
-  });
-
-  const data = await res.json();
-
-  if (!res.ok) {
-    addNotification("Error", data.message, "EVENT");
-    return;
-  }
-
-  setUser(data.user);
-  setShowLoginModal(false);
-};
 
   const handleUpdateTheme = (newTheme: AppTheme) => {
     setUser(prev => ({ ...prev, theme: newTheme }));

@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const admin = require("firebase-admin");
 
 const app = express();
 
@@ -7,102 +8,76 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Fake database (replace later with real DB)
-const users = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "test@demo.com",
-    password: "1234",
-    isRegistered: true,
-  },
-  {
-    id: 2,
-    name: "Anna Smith",
-    email: "anna@test.com",
-    password: "abcd",
-    isRegistered: true,
-  },
-];
-
-// 🔐 LOGIN ROUTE
-app.post("/api/login", (req, res) => {
-  const { email, password } = req.body;
-
-  // ❌ Validation
-  if (!email || !password) {
-    return res.status(400).json({
-      message: "Email and password are required",
-    });
-  }
-
-  const user = users.find(
-    (u) => u.email === email && u.password === password
-  );
-
-  if (!user) {
-    return res.status(401).json({
-      message: "Invalid credentials",
-    });
-  }
-
-  // ✅ Never send password to frontend
-  const safeUser = {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    isRegistered: user.isRegistered,
-  };
-
-  res.status(200).json({
-    message: "Login successful",
-    user: safeUser,
-  });
+// ✅ Initialize Firebase Admin
+admin.initializeApp({
+  credential: admin.credential.cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+  }),
 });
 
-// 📝 REGISTER ROUTE
-app.post("/api/register", (req, res) => {
-  const { name, email, password } = req.body;
+const auth = admin.auth();
+const db = admin.firestore();
 
-  // ❌ Validation
-  if (!name || !email || !password) {
-    return res.status(400).json({
-      message: "All fields are required",
-    });
+/**
+ * ✅ Middleware: Verify Firebase token
+ */
+const verifyFirebaseToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Missing auth token" });
   }
 
-  // ❌ Check if user already exists
-  const existingUser = users.find((u) => u.email === email);
-  if (existingUser) {
-    return res.status(409).json({
-      message: "User already exists",
-    });
+  const token = authHeader.split("Bearer ")[1];
+
+  try {
+    const decodedToken = await auth.verifyIdToken(token);
+    req.user = decodedToken; // uid, email, etc.
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
+};
 
-  // ✅ Create new user
-  const newUser = {
-    id: users.length + 1,
-    name,
-    email,
-    password, // ⚠️ Hash in real apps
-    isRegistered: true,
-  };
-
-  users.push(newUser);
-
-  res.status(201).json({
-    message: "User registered successfully",
-  });
-});
-
-// ✅ Health check route
+// ✅ Health check
 app.get("/", (req, res) => {
-  res.send("✅ API is running");
+  res.send("✅ API is running with Firebase Auth");
+});
+
+// ✅ Protected route example
+app.get("/api/me", verifyFirebaseToken, async (req, res) => {
+  try {
+    const userDoc = await db.collection("users").doc(req.user.uid).get();
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ message: "User profile not found" });
+    }
+
+    res.json({
+      uid: req.user.uid,
+      email: req.user.email,
+      ...userDoc.data(),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch user profile" });
+  }
+});
+
+// ✅ Example protected action
+app.post("/api/protected-action", verifyFirebaseToken, (req, res) => {
+  res.json({
+    message: "✅ You are authenticated",
+    uid: req.user.uid,
+    email: req.user.email,
+  });
 });
 
 // 🚀 Start server
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
+``

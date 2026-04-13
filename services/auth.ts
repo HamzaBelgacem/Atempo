@@ -3,10 +3,10 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
-//  Register user
+// Register user
 export const registerWithEmail = async (
   email: string,
   password: string
@@ -19,18 +19,18 @@ export const registerWithEmail = async (
 
   const user = result.user;
 
-  // Save user in Firestore
+  // Save user profile in Firestore
   await setDoc(doc(db, "users", user.uid), {
     uid: user.uid,
     email: user.email,
     provider: "email",
-    createdAt: new Date(),
+    createdAt: serverTimestamp(),
   });
 
   return user;
 };
 
-//  Login user
+// Login user
 export const loginWithEmail = async (
   email: string,
   password: string
@@ -44,8 +44,7 @@ export const loginWithEmail = async (
   return result.user;
 };
 
-//  Logout
+// ✅ Logout
 export const logout = async () => {
   await signOut(auth);
 };
-``

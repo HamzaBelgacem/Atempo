@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { User, ChatGroup, AppTheme } from '../types';
-import { MessageSquare, Users, Briefcase, Search, ArrowRight, Lock, Sparkles, Film, Music, Book, Palette, Globe, ChevronRight, Plus, Hash, PlayCircle, Gamepad2, Video, User as UserIcon } from 'lucide-react';
+import { User, ChatGroup, AppTheme, UserType } from '../types';
+import { MessageSquare, Users, Briefcase, ArrowRight, Lock, Sparkles, Film, Music, Book, Palette, Globe, ChevronRight, Plus, Hash, PlayCircle, Gamepad2, Video, User as UserIcon, Search, Camera, X } from 'lucide-react';
 import { TRANSLATIONS, MOCK_CLUBS } from '../constants';
+import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
 
 interface ChatsListViewProps {
   user: User;
@@ -26,7 +27,7 @@ const ExplorarClubCard: React.FC<{ club: ChatGroup; onClick: () => void; index: 
   return (
     <button 
       onClick={onClick}
-      className="relative aspect-[4/5] w-full rounded-[24px] overflow-hidden group shadow-watercolor active:scale-[0.96] transition-all border border-white/40"
+      className="relative aspect-[4/5] w-full rounded-[16px] overflow-hidden group shadow-watercolor active:scale-[0.96] transition-all border border-white/40"
       style={{ animationDelay: `${index * 0.1}s` }}
     >
       {/* Background Image - "Fit" to container */}
@@ -64,9 +65,9 @@ const ExplorarClubCard: React.FC<{ club: ChatGroup; onClick: () => void; index: 
 const StandardChatRow: React.FC<{ chat: ChatGroup; onClick: () => void; isDark: boolean }> = ({ chat, onClick, isDark }) => (
   <button 
     onClick={onClick}
-    className={`w-full p-4 rounded-[32px] border transition-all active:scale-[0.98] flex items-center gap-4 text-left group bg-white/60 border-white/40 shadow-watercolor`}
+    className={`w-full p-4 rounded-2xl border transition-all active:scale-[0.98] flex items-center gap-4 text-left group bg-white/60 border-white/40 shadow-watercolor`}
   >
-    <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-sm relative shrink-0 border border-white/40">
+    <div className="w-12 h-12 rounded-full overflow-hidden shadow-sm relative shrink-0 border border-white/40">
       {chat.coverImage ? (
         <img src={chat.coverImage} className="w-full h-full object-cover" alt={chat.name} referrerPolicy="no-referrer" />
       ) : (
@@ -87,61 +88,178 @@ const StandardChatRow: React.FC<{ chat: ChatGroup; onClick: () => void; isDark: 
 );
 
 const ChatsListView: React.FC<ChatsListViewProps> = ({ user, onOpenChat, activeChats }) => {
-  const [activeTab, setActiveTab] = useState<'EVENTS' | 'FRIENDS' | 'BUSINESS' | 'CLUBS'>('EVENTS');
-  const recentChatsRef = useRef<HTMLDivElement>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isBouncing, setIsBouncing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [displayedClubs, setDisplayedClubs] = useState<ChatGroup[]>(MOCK_CLUBS);
   
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollY } = useScroll({
+    container: scrollRef,
+  });
+
+  const titleScale = useTransform(scrollY, [0, 60], [1, 0.85]);
+  const titleOpacity = useTransform(scrollY, [0, 60], [1, 0]);
+  const titleBlur = useTransform(scrollY, [0, 60], ["blur(0px)", "blur(4px)"]);
+  const titleY = useTransform(scrollY, [0, 60], [0, 60]);
+
   const t = useMemo(() => TRANSLATIONS[user.language] || TRANSLATIONS.en, [user.language]);
   const isDark = user.theme === AppTheme.DARK;
 
-  const filteredChats = useMemo(() => {
-    return activeChats.filter(chat => {
-      if (activeTab === 'EVENTS') return chat.type === 'EVENT' || !chat.type;
-      if (activeTab === 'FRIENDS') return chat.type === 'FRIEND';
-      if (activeTab === 'BUSINESS') return chat.type === 'BUSINESS';
-      if (activeTab === 'CLUBS') return chat.type === 'CLUB';
-      return false;
-    });
-  }, [activeChats, activeTab]);
+  const MOCK_SEARCH_RESULTS = [
+    { id: 's1', title: 'Contemporary Art Collective', image: 'https://images.unsplash.com/photo-1547826039-bfc35e0f1ea8?q=80&w=200' },
+    { id: 's2', title: 'Underground Jazz Society', image: 'https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=200' },
+    { id: 's3', title: 'Classical Literature Circle', image: 'https://images.unsplash.com/photo-1491841573634-28140fc7ced7?q=80&w=200' },
+    { id: 's4', title: 'Street Photography Guild', image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=200' },
+    { id: 's5', title: 'Independent Cinema Club', image: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=200' },
+    { id: 's6', title: 'Modern Sculpture Workshop', image: 'https://images.unsplash.com/photo-1544413647-ad539264244d?q=80&w=200' },
+    { id: 's7', title: 'Digital Illustration Hub', image: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=200' },
+    { id: 's8', title: 'Renaissance History Group', image: 'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?q=80&w=200' },
+  ];
+
+  const searchResults = searchQuery.trim() === '' 
+    ? MOCK_SEARCH_RESULTS 
+    : MOCK_SEARCH_RESULTS.filter(r => r.title.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const handleSelectClub = (result: typeof MOCK_SEARCH_RESULTS[0]) => {
+    const alreadyExists = displayedClubs.find(c => c.id === result.id);
+    
+    if (!alreadyExists) {
+      const newClub: ChatGroup = {
+        id: result.id,
+        name: result.title,
+        eventId: 'club-context',
+        type: 'CLUB',
+        lastMessage: 'Welcome to the club!',
+        lastTime: 'Just now',
+        coverImage: result.image,
+        tags: ['Art', 'Culture'],
+        members: [{ name: user.name, gender: 'M', eventsAttended: 0, isTrusted: true, isHost: false }],
+        messages: []
+      };
+      setDisplayedClubs(prev => [newClub, ...prev]);
+      onOpenChat(newClub);
+    } else {
+      onOpenChat(alreadyExists);
+    }
+    
+    setIsSearching(false);
+    setSearchQuery('');
+  };
 
   return (
-    <div className={`h-full flex flex-col font-sans transition-colors duration-500 bg-transparent text-primary`}>
+    <div className={`h-full flex flex-col font-sans transition-colors duration-500 bg-transparent text-primary relative`}>
       
-      {/* HEADER & TABS */}
-      <div className={`px-6 pt-6 pb-6 sticky top-0 z-20 backdrop-blur-xl bg-white/40`}>
-          <div className="flex justify-between items-center mb-4">
-              <div>
-                  <h1 className="text-3xl font-serif font-bold tracking-tight text-[#432818]">{t.chats.title}</h1>
+      {/* SEARCH OVERLAY */}
+      <AnimatePresence>
+        {isSearching && (
+          <motion.div 
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className={`fixed inset-0 z-[100] flex flex-col ${isDark ? 'bg-[#2D3436]' : 'bg-[#FDFCF8]'}`}
+          >
+            {/* Search Bar Top */}
+            <div className="px-4 pt-12 pb-4 flex items-center gap-3">
+              <div className={`flex-1 flex items-center gap-3 px-4 py-2.5 rounded-2xl border ${isDark ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/5'}`}>
+                <Search size={18} className="opacity-40" />
+                <input 
+                  autoFocus
+                  type="text"
+                  placeholder="Search your clubs"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="flex-1 bg-transparent border-none outline-none text-sm font-bold placeholder:opacity-40"
+                />
+                {user.type === UserType.ARTIST_CURATOR && (
+                  <Camera size={18} className="opacity-40" />
+                )}
               </div>
-              <button className={`w-7 h-7 rounded-full flex items-center justify-center transition-all active:scale-95 bg-white/60 text-slate-400 border border-white/40 shadow-sm`}>
-                  <Search size={12} />
+              <button 
+                onClick={() => {
+                  setIsSearching(false);
+                  setSearchQuery('');
+                }}
+                className="text-sm font-bold opacity-60"
+              >
+                Cancel
               </button>
-          </div>
+            </div>
 
-          <div className={`flex gap-1 p-1 rounded-[24px] bg-white/60 border border-white/40 shadow-sm backdrop-blur-md`}>
-              {[
-                  { id: 'EVENTS', label: t.chats.tabs.events, icon: <MessageSquare size={16} /> },
-                  { id: 'FRIENDS', label: t.chats.tabs.friends, icon: <Users size={16} /> },
-                  { id: 'BUSINESS', label: t.chats.tabs.business, icon: <Briefcase size={16} /> },
-                  { id: 'CLUBS', label: t.chats.tabs.clubs, icon: <Hash size={16} /> }
-              ].map((tab) => (
+            {/* Results List */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 no-scrollbar">
+              <div className="space-y-6">
+                {searchResults.map((result) => (
                   <button 
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id as any)}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 ${activeTab === tab.id ? 'bg-white text-[#FFB7B7] shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                    key={result.id} 
+                    onClick={() => handleSelectClub(result)}
+                    className="w-full flex items-center gap-4 group text-left"
                   >
-                      {tab.icon} {tab.label}
+                    <div className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-sm">
+                      <img src={result.image} className="w-full h-full object-cover" alt={result.title} referrerPolicy="no-referrer" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-bold tracking-tight truncate">{result.title}</h4>
+                    </div>
+                    <div className="p-2 opacity-20 group-hover:opacity-100 transition-opacity">
+                      <Plus size={16} />
+                    </div>
                   </button>
-              ))}
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar pb-20">
+          <motion.div
+            animate={isBouncing ? { 
+                y: [0, -10, 0],
+                scaleY: [1, 1.02, 1],
+                originY: 1
+            } : { y: 0, scaleY: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            onAnimationComplete={() => setIsBouncing(false)}
+          >
+          {/* HEADER (Not sticky) */}
+          <div className="px-6 pt-8 pb-4 relative h-[60px] flex items-center">
+              <motion.div 
+                style={{ 
+                    scale: titleScale, 
+                    opacity: titleOpacity, 
+                    filter: titleBlur,
+                    y: titleY,
+                    zIndex: 10
+                }}
+                className="flex justify-between items-center w-full"
+              >
+                  <div>
+                      <h1 className={`text-2xl font-serif font-bold tracking-tight mb-0.5 ${isDark ? 'text-white' : 'text-[#432818]'}`}>{t.chats.title}</h1>
+                      <p className={`text-[9px] font-bold uppercase tracking-[0.1em] opacity-40 ${isDark ? 'text-white' : 'text-[#432818]'}`}>Join clubs to share and learn</p>
+                  </div>
+              </motion.div>
           </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto no-scrollbar px-6 pt-2 pb-40">
           
+          {/* SEARCH BAR TRIGGER (Sticky) */}
+          <div className={`sticky top-0 z-20 px-5 py-4 backdrop-blur-xl ${isDark ? 'bg-[#2D3436]/40' : 'bg-white/40'}`}>
+            <button 
+              onClick={() => setIsSearching(true)}
+              className={`w-full flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all active:scale-[0.98] ${isDark ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/5'}`}
+            >
+              <Search size={18} className="opacity-40" />
+              <span className="text-sm font-bold opacity-40">Search your clubs</span>
+              <div className="flex-1" />
+              {user.type === UserType.ARTIST_CURATOR && (
+                <Camera size={18} className="opacity-40" />
+              )}
+            </button>
+          </div>
+
           {/* SECTION: EXPLORAR (CLUBS) */}
           <div className="space-y-4">
-            {/* Image-based section header removed as per request */}
-            <div className="grid grid-cols-2 gap-2">
-              {MOCK_CLUBS.map((club, idx) => (
+            <div className="grid grid-cols-2 gap-1">
+              {displayedClubs.map((club, idx) => (
                 <ExplorarClubCard 
                   key={club.id} 
                   club={club} 
@@ -151,48 +269,11 @@ const ChatsListView: React.FC<ChatsListViewProps> = ({ user, onOpenChat, activeC
               ))}
             </div>
           </div>
-
-          {/* SECTION: CONVERSACIONES RECIENTES */}
-          <div ref={recentChatsRef} className="space-y-6 mt-16">
-            <div className="flex items-center justify-between px-2">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.25em]">
-                    Recent Conversations
-                </h3>
-                <button className="text-[9px] font-black text-emerald-500 uppercase flex items-center gap-1">
-                    See More <ChevronRight size={12} />
-                </button>
-            </div>
-            
-            {activeTab !== 'CLUBS' && filteredChats.length === 0 ? (
-                <div className="py-20 flex flex-col items-center text-center px-10">
-                    <div className={`w-20 h-20 rounded-[32px] flex items-center justify-center mb-8 ${isDark ? 'bg-white/5 text-white/20' : 'bg-gray-50 text-gray-200'}`}>
-                        <Lock size={32} />
-                    </div>
-                    <h3 className="text-xl font-black tracking-tight mb-2 opacity-60">{t.chats.emptyTitle}</h3>
-                    <p className="text-xs font-medium text-gray-400 leading-relaxed">{t.chats.emptySub}</p>
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {filteredChats.map((chat) => (
-                        <StandardChatRow 
-                            key={chat.id} 
-                            chat={chat} 
-                            onClick={() => onOpenChat(chat)} 
-                            isDark={isDark} 
-                        />
-                    ))}
-                </div>
-            )}
-          </div>
-
-          {/* DISCOVER MORE FOOTER */}
-          <div className="mt-16 pt-10 border-t border-black/5 flex flex-col items-center text-center">
-              <div className="w-16 h-16 rounded-[22px] bg-emerald-50 text-emerald-500 flex items-center justify-center shadow-sm mb-4">
-                  <Sparkles size={28} />
-              </div>
-              <h4 className={`text-lg font-black tracking-tighter ${isDark ? 'text-white' : 'text-black'}`}>Connect with your city</h4>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Join more clubs to expand your network</p>
-          </div>
+          </motion.div>
+          <motion.div 
+            onViewportEnter={() => setIsBouncing(true)}
+            className="h-1 w-full"
+          />
       </div>
     </div>
   );

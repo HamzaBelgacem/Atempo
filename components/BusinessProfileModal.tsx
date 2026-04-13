@@ -15,7 +15,15 @@ const BusinessProfileModal: React.FC<BusinessProfileModalProps> = ({ business, o
   const memories = EXPLORE_MEMORIES.filter(m => activeEvents.some(e => e.id === m.eventId));
 
   return (
-    <div className="fixed inset-0 z-[400] bg-white/40 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in pointer-events-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-6 animate-fade-in pointer-events-auto" onClick={onClose} style={{
+      backgroundImage: `
+        radial-gradient(at 0% 0%, rgba(255, 180, 200, 0.4) 0, transparent 70%),
+        radial-gradient(at 100% 100%, rgba(220, 180, 255, 0.3) 0, transparent 70%)
+      `,
+      backgroundColor: 'rgba(253, 252, 248, 0.9)',
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)'
+    }}>
       <div 
         className="bg-paper w-full max-w-sm rounded-[48px] overflow-hidden shadow-watercolor animate-scale-in flex flex-col max-h-[85vh] border border-black/10"
         onClick={e => e.stopPropagation()}

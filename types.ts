@@ -1,18 +1,19 @@
 
 export enum ViewState {
   SPLASH = 'SPLASH',
-  ONBOARDING = 'ONBOARDING',
   MAP = 'MAP',
   DISCOVER = 'DISCOVER',
   MEMORIES = 'MEMORIES',
   PROFILE = 'PROFILE',
   PARTNERS = 'PARTNERS',
-  CHATS = 'CHATS'
+  CHATS = 'CHATS',
+  COMMUNITY = 'COMMUNITY'
 }
 
 export enum UserType {
   STANDARD = 'STANDARD',
-  BUSINESS = 'BUSINESS'
+  BUSINESS = 'BUSINESS',
+  ARTIST_CURATOR = 'ARTIST_CURATOR'
 }
 
 export enum AppTheme {
@@ -36,12 +37,15 @@ export interface User {
   id: string;
   name: string;
   email?: string;
+  password?: string;
   bio?: string;
   avatarUrl?: string;
+  professional?: string;
   instagramHandle?: string;
   locationLabel?: string;
   language: AppLanguage;
   isRegistered: boolean;
+  isLogIn: boolean;
   isOnboarded: boolean;
   type: UserType;
   theme?: AppTheme;
@@ -51,9 +55,16 @@ export interface User {
   timePreferences?: string[];
   locationPermission: 'prompt' | 'granted' | 'denied';
   marketingAccepted: boolean;
+  isGameCompleted?: boolean;
+  gameAnswers?: Record<string, string>;
+  hasAttendedEvent?: boolean;
+  hasUploadedMemory?: boolean;
+  isVerified?: boolean;
+  hasLifetimeSubscription?: boolean;
   registeredEventIds?: string[];
   activeChatIds?: string[];
   notificationPrefs?: UserNotificationPrefs;
+  personalityProfile?: PersonalityProfile;
   // Business specific fields
   reliability?: number;
   rating?: number;
@@ -87,6 +98,20 @@ export interface Business {
   services?: BusinessService[];
 }
 
+export type ContributorRole = 'Event Host' | 'Performing Artist' | 'Visual Artist' | 'Curator' | 'Sponsor' | 'Co-organizer';
+
+export interface EventCollaborator {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  professional?: string;
+  role: ContributorRole;
+  eventsCount?: number;
+  followersCount?: number;
+  collaborationsCount?: number;
+  distance?: string;
+}
+
 export interface Event {
   id: string;
   title: string;
@@ -110,11 +135,15 @@ export interface Event {
   tags?: string[];
   minGroupSize?: number;
   maxGroupSize?: number;
+  publishedAt?: string;
+  collaboratorIds?: string[];
+  collaborators?: EventCollaborator[];
 }
 
 export interface MemoryItem {
     id: string;
     url: string;
+    urls?: string[];
     userName: string;
     caption: string;
     likes: number;
@@ -123,6 +152,10 @@ export interface MemoryItem {
     eventId?: string;
     city?: string;
     country?: string;
+    timestamp?: number;
+    avatar?: string;
+    commentsCount?: number;
+    repostsCount?: number;
 }
 
 export interface CityStatus {
@@ -166,6 +199,19 @@ export interface ChatGroup {
   tags?: string[];
 }
 
+export interface Conversation {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  lastMessage: string;
+  timestamp: string;
+  unreadCount: number;
+  isPinned: boolean;
+  isMuted: boolean;
+  isOnline: boolean;
+  type: 'EVENT' | 'HUB' | 'CREATIVE';
+}
+
 export interface Notification {
   id: string;
   type: 'EVENT' | 'MESSAGE' | 'REMINDER';
@@ -174,4 +220,68 @@ export interface Notification {
   timestamp: number;
 }
 
-export const CATEGORIES = ['All', 'Art', 'Music', 'Sport', 'Tech', 'Food', 'Nightlife', 'Festivities', 'Kids'];
+export interface CommunityGroup {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  lastMessage?: string;
+  lastTimestamp?: number;
+  memberCount: number;
+  isJoined: boolean;
+  isAnnouncement?: boolean;
+  requiresRequest?: boolean;
+}
+
+export enum PersonalityArchetype {
+  CONNECTOR = 'The Connector',
+  VISIONARY = 'The Visionary',
+  STORYTELLER = 'The Storyteller',
+  PHILOSOPHER = 'The Philosopher',
+  EXPLORER = 'The Explorer',
+  STRATEGIST = 'The Strategist',
+  MASTERMIND = 'The Mastermind',
+  INNOVATOR = 'The Innovator',
+  SPARK = 'The Spark',
+  EMPATH = 'The Empath',
+  CHILL_WAVE = 'The Chill Wave',
+  GUIDE = 'The Guide'
+}
+
+export type SocialEnergy = 'The Icebreaker' | 'The Catalyst' | 'The Observer';
+
+export interface PersonalityProfile {
+  archetype: PersonalityArchetype;
+  motive: string;
+  energy: SocialEnergy;
+  interest: string;
+  atmosphere: string;
+}
+
+export interface Group {
+  id: string;
+  eventId: string;
+  members: User[];
+  score?: number;
+}
+
+export interface EventCommunity {
+  id: string;
+  eventId: string;
+  name: string;
+  logoUrl: string;
+  groups: CommunityGroup[];
+}
+
+export const CATEGORIES = [
+  'All', 
+  'Visual Arts', 
+  'Performance', 
+  'Music', 
+  'Media', 
+  'Literature', 
+  'Fashion', 
+  'Food', 
+  'Heritage', 
+  'Learning', 
+  'Markets'
+];

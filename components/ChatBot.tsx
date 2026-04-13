@@ -45,17 +45,17 @@ const ChatBot: React.FC<{userType: string}> = ({userType}) => {
                     <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
                 </div>}
             </div>
-            <div className="p-3 bg-white flex gap-2 border-t border-gray-50">
+            <div className="bg-white flex border-t border-gray-200 h-12">
                 <input 
                     type="text" 
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     placeholder="Message assistant..."
-                    className="flex-1 bg-gray-50 rounded-2xl px-5 py-3 text-[14px] font-semibold text-black focus:outline-none placeholder:text-gray-400"
+                    className="flex-1 bg-transparent px-4 text-[13px] font-semibold text-black focus:outline-none placeholder:text-gray-400"
                 />
-                <button onClick={handleSend} disabled={loading} className="w-12 h-12 bg-purple-600 text-white rounded-2xl flex items-center justify-center shadow-lg active:scale-95 disabled:opacity-50 transition-all">
-                    <Send size={18} />
+                <button onClick={handleSend} disabled={loading} className="w-12 h-12 bg-purple-600 text-white rounded-none flex items-center justify-center active:scale-95 disabled:opacity-50 transition-all">
+                    <Send size={16} />
                 </button>
             </div>
         </div>

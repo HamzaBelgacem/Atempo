@@ -1,7 +1,3 @@
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "./services/firebase";
-import { getUserProfile } from "./services/user";
-import { loginWithEmail, logout } from "./services/auth";
 import React, { useState, useEffect, useMemo } from 'react';
 import MapView from './components/MapView';
 import DiscoverFeed from './components/DiscoverFeed';
@@ -22,72 +18,6 @@ import { motion, AnimatePresence, useMotionValue, useTransform, useSpring, anima
 import { Map, Compass, User as UserIcon, PlayCircle, Briefcase, Shield, MessageSquare, Users, X } from 'lucide-react';
 import { ViewState, User, UserType, Event, ChatGroup, Business, AppTheme, ChatMember, MemoryItem, Notification, ContributorRole, PersonalityProfile } from './types';
 import { MOCK_EVENTS, MOCK_BUSINESSES, TRANSLATIONS } from './constants';
-import LoginModal from './components/ui/LoginModal';
-
-const [firebaseUser, setFirebaseUser] = useState<any>(null);
-
-useEffect(() => {
-  const unsub = onAuthStateChanged(auth, async (fbUser) => {
-
-    if (!fbUser) {
-      // Not logged in
-      setUser(prev => ({
-        ...prev,
-        isRegistered: false
-      }));
-      setFirebaseUser(null);
-      return;
-    }
-
-    setFirebaseUser(fbUser);
-
-    // Load full Firestore profile
-    const profile = await getUserProfile(fbUser.uid);
-
-    if (profile) {
-      setUser(prev => ({
-        ...prev,
-        ...profile,
-        id: fbUser.uid,
-        email: fbUser.email || "",
-        isRegistered: true
-      }));
-    }
-
-  });
-
-  return () => unsub();
-}, []);
-
-
-const handleLogin = async (email: string, password: string) => {
-
-  try {
-
-    // ✅ Firebase logs the user in
-    await loginWithEmail(email, password);
-
-    // ✅ Close login modal
-    setShowLoginModal(false);
-
-    // ✅ Optional notification
-    addNotification(
-      'Welcome back ✅',
-      'Login successful'
-    );
-
-  } catch (error: any) {
-
-    console.error("Login error:", error);
-
-    addNotification(
-      'Login failed ❌',
-      error.message || 'Invalid email or password'
-    );
-
-  }
-};
-
 
 const THEME_COLORS: Record<AppTheme, string> = {
   [AppTheme.ROSE]: '#FDFCF8', 
@@ -97,22 +27,10 @@ const THEME_COLORS: Record<AppTheme, string> = {
   [AppTheme.SUNSET]: '#FFEDD5',
   [AppTheme.DARK]: '#2D3436'
 };
-const users = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "test@demo.com",
-    password: "1234",
-  },
-  {
-    id: 2,
-    name: "Anna Smith",
-    email: "anna@test.com",
-    password: "abcd",
-  },
-];
+
 const VIEW_ORDER: Record<ViewState, number> = {
   [ViewState.SPLASH]: 0,
+  [ViewState.ONBOARDING]: 1,
   [ViewState.MAP]: 2,
   [ViewState.DISCOVER]: 3,
   [ViewState.MEMORIES]: 4,
@@ -122,15 +40,13 @@ const VIEW_ORDER: Record<ViewState, number> = {
   [ViewState.COMMUNITY]: 7,
 };
 
-
-
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>(ViewState.SPLASH);
   const [direction, setDirection] = useState(0);
   const [transitionType, setTransitionType] = useState<"swipe" | "tap">("tap");
   const dragX = useMotionValue(0);
   const dragXSpring = useSpring(dragX, { stiffness: 300, damping: 30 });
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedTime, setSelectedTime] = useState<string>('Now');
   const [priceFilter, setPriceFilter] = useState<'all' | 'paid' | 'free'>('all');
@@ -148,6 +64,36 @@ const App: React.FC = () => {
     ] : []
   })));
 
+  const handleToggleCollaborate = (eventId: string) => {
+    if (!user.isRegistered) {
+      setShowRegModal(true);
+      return;
+    }
+    
+    setEvents(prev => prev.map(e => {
+      if (e.id === eventId) {
+        const isCollaborating = e.collaboratorIds?.includes(user.id);
+        const newIds = isCollaborating 
+          ? e.collaboratorIds?.filter(id => id !== user.id) 
+          : [...(e.collaboratorIds || []), user.id];
+        
+        const newCollaborators = isCollaborating
+          ? e.collaborators?.filter(c => c.id !== user.id)
+          : [...(e.collaborators || []), { 
+              id: user.id, 
+              name: user.name, 
+              avatarUrl: user.avatarUrl, 
+              role: 'Performing Artist' as ContributorRole,
+              eventsCount: 0,
+              followersCount: 0,
+              collaborationsCount: 1
+            }];
+
+        return { ...e, collaboratorIds: newIds, collaborators: newCollaborators };
+      }
+      return e;
+    }));
+  };
 
   const handleOpenCollaboratorProfile = (collaboratorId: string) => {
     setSelectedCollaboratorId(collaboratorId);
@@ -158,8 +104,6 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : {
       id: 'guest_' + Math.random().toString(36).substr(2, 9),
       name: 'Guest',
-     // email: 'email@example.com',
-     // password: 'password',
       language: 'en',
       isRegistered: false,
       isOnboarded: false,
@@ -179,6 +123,17 @@ const App: React.FC = () => {
       }
     };
   });
+
+  const handleOnboardingComplete = (profile: PersonalityProfile) => {
+    const updatedUser = { 
+      ...user, 
+      isOnboarded: true, 
+      personalityProfile: profile 
+    };
+    setUser(updatedUser);
+    localStorage.setItem('eh_user_v3', JSON.stringify(updatedUser));
+    navigateTo(ViewState.MAP);
+  };
 
   const [allChatGroups, setAllChatGroups] = useState<ChatGroup[]>([]);
   const [interactions, setInteractions] = useState<{
@@ -321,11 +276,15 @@ const App: React.FC = () => {
   useEffect(() => {
     if (view === ViewState.SPLASH) {
       const timer = setTimeout(() => {
-        navigateTo(ViewState.MAP);
+        if (!user.isOnboarded) {
+          navigateTo(ViewState.ONBOARDING);
+        } else {
+          navigateTo(ViewState.MAP);
+        }
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [view]);
+  }, [view, user.isOnboarded]);
 
   const tabs = useMemo(() => [
     { id: ViewState.MAP, icon: Map, label: 'Map', screen: ViewState.MAP, disableSwipeNav: true },
@@ -425,20 +384,35 @@ const App: React.FC = () => {
     }
   };
 
- const handleLogout = async () => {
-
-  await logout();
-
-  setUser(prev => ({
-    ...prev,
-    isRegistered: false
-  }));
-
-  setShowSettings(false);
-
-  navigateTo(ViewState.MAP);
-
-};
+  const handleLogout = () => {
+    localStorage.removeItem('eh_user_v3');
+    setUser({
+      id: 'guest_' + Math.random().toString(36).substr(2, 9),
+      name: 'Guest',
+      language: 'en',
+      isOnboarded: true, 
+      isRegistered: false,
+      type: UserType.STANDARD,
+      theme: AppTheme.ROSE,
+      preferences: [],
+      locationPermission: 'prompt',
+      marketingAccepted: false,
+      registeredEventIds: ['e1', 'e3'],
+      activeChatIds: ['e1', 'e3'],
+      instagramHandle: '@horizon_guest',
+      locationLabel: 'Valencia',
+      notificationPrefs: {
+        newEvents: true,
+        groupMessages: true,
+        businessInvites: true
+      }
+    });
+    setAllChatGroups([]);
+    setCurrentCity('Valencia');
+    setShowSettings(false);
+    setShowRegModal(true); 
+    navigateTo(ViewState.MAP);
+  };
 
   const handleJoinChat = (target: Event | { id: string, title: string, type?: 'EVENT' | 'BUSINESS' }) => {
     const isEvent = 'attendees' in target;
@@ -489,23 +463,24 @@ const App: React.FC = () => {
     }
   };
 
-const handleRegistrationSuccess = () => {
+  const handleRegistrationSuccess = (data: any) => {
+    const updatedUser = { ...data, isRegistered: true };
+    
+    // If business registers with invite code, grant benefits (mocked)
+    if (data.inviteCode && data.type === UserType.BUSINESS) {
+      updatedUser.isVerified = true;
+      updatedUser.hasLifetimeSubscription = true;
+    }
 
-  setShowRegModal(false);
-
-  setTimeout(() => {
-    setShowWelcomeGuide(true);
-  }, 500);
-
-};
-
-   // const handleLogin = (email: string, password: string) => {
-  // const existingUser = usersDB.find(
-  //   u => u.email === email && u.password === password
-  // );
-
-
-
+    setUser(prev => ({ ...prev, ...updatedUser }));
+    if (data.locationLabel) {
+      setCurrentCity(data.locationLabel);
+    }
+    setShowRegModal(false);
+    setTimeout(() => {
+      setShowWelcomeGuide(true);
+    }, 500);
+  };
 
   const handleUpdateTheme = (newTheme: AppTheme) => {
     setUser(prev => ({ ...prev, theme: newTheme }));
@@ -704,12 +679,7 @@ const handleRegistrationSuccess = () => {
           inviteCode={inviteCode}
         />
       )}
-{showLoginModal && (
-  <LoginModal
-    onClose={() => setShowLoginModal(false)}
-    onLogin={handleLogin}
-  />
-)}
+
       {showSettings && (
           <SettingsModal 
             user={user} 
@@ -723,7 +693,7 @@ const handleRegistrationSuccess = () => {
       <AnimatePresence>
         {selectedEvent && (
           <EventDetailModal 
-            key="event-detail-modal"
+            key={selectedEvent.id}
             event={selectedEvent} 
             user={user}
           tapPosition={tapPosition}
@@ -747,9 +717,7 @@ const handleRegistrationSuccess = () => {
             const nextIndex = direction === 'next' 
               ? (index + 1) % currentFilteredEvents.length 
               : (index - 1 + currentFilteredEvents.length) % currentFilteredEvents.length;
-            const nextEvent = currentFilteredEvents[nextIndex];
-            setSelectedEvent(nextEvent);
-            setMapCenterTarget(nextEvent);
+            setSelectedEvent(currentFilteredEvents[nextIndex]);
           }}
           language={user.language}
           onToggleCollaborate={handleToggleCollaborate}
@@ -922,6 +890,10 @@ const handleRegistrationSuccess = () => {
             className="h-full w-full absolute inset-0"
           >
             <div className="h-full w-full" style={getViewBackgroundStyle(view)}>
+            {view === ViewState.ONBOARDING && (
+              <OnboardingFlow onComplete={handleOnboardingComplete} />
+            )}
+
             {view === ViewState.MAP && (
               <MapView 
                 events={events} 
@@ -939,7 +911,6 @@ const handleRegistrationSuccess = () => {
                 currentCity={currentCity}
                 onCityChange={handleCityChange}
                 onCapture={handleCapture}
-                isEventSelected={!!selectedEvent}
               />
             )}
             
@@ -1024,7 +995,6 @@ const handleRegistrationSuccess = () => {
                 user={user} 
                 onRegister={() => setShowRegModal(true)} 
                 onLogout={handleLogout} 
-                onLogin={() => setShowLoginModal(true)}
                 onSelectEvent={setSelectedEvent}
                 onOpenSettings={() => setShowSettings(true)}
                 onUpdateUser={setUser}
